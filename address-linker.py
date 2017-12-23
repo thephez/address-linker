@@ -31,10 +31,21 @@ def db_update_address(conn, address_data):
 def db_check_address(conn, address):
     # Returns 1 if address found, 0 otherwise
     cur = conn.cursor()
-    cur.execute("SELECT EXISTS(SELECT 1 FROM Addresses WHERE Address=? LIMIT 1)", (address,))
+    cur.execute("SELECT EXISTS(SELECT 1 FROM Addresses WHERE Address=? AND Account IS NOT null LIMIT 1)", (address,))
 
     found = cur.fetchone()[0]
     return found
+
+def db_get_account_balances(conn):
+    cur = conn.cursor()
+    cur.execute("SELECT Account, SUM(Balance), (SUM(Balance)*1.0/100000000) FROM Addresses WHERE balance > 0 GROUP BY Account")
+
+    balances = cur.fetchall()
+    print('Balance summary')
+    for row in balances:
+        print(row)
+
+    return
 
 def scan_addresses(addresslist, conn, maxrequests=10, delay=0):
     print('Sleep {} second(s) between requests'.format(delay))
@@ -108,7 +119,9 @@ def main():
             scan_addresses(addresslist, conn, 250, 1)
 
         except Exception as e:
-            print('Exception: {}'.format(e))
+            print('\nException: {}\n'.format(e))
+
+        db_get_account_balances(conn)
 
         print('Done')
 
