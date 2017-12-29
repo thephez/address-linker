@@ -23,9 +23,33 @@ def db_init(conn):
     # Required for 'insert or replace' to work properly
     conn.execute('''CREATE UNIQUE INDEX IF NOT EXISTS iaddress ON Addresses (Address)''')
 
+    # Create table if not present
+    conn.execute('''CREATE TABLE IF NOT EXISTS AddressInputs
+          (Address text, InputAddress text, TxID text, BlockHeight INTEGER)''')
+
+    # Required for 'insert or replace' to work properly
+    conn.execute('''CREATE UNIQUE INDEX IF NOT EXISTS itxinput ON AddressInputs (InputAddress, TxID)''')
+
+    # Create table if not present
+    conn.execute('''CREATE TABLE IF NOT EXISTS AddressOutputs
+          (Address text, OutputAddress text, TxID text, BlockHeight INTEGER)''')
+
+    # Required for 'insert or replace' to work properly
+    conn.execute('''CREATE UNIQUE INDEX IF NOT EXISTS itxoutput ON AddressOutputs (OutputAddress, TxID)''')   
+
 def db_update_address(conn, address_data):
     conn.execute("""INSERT OR REPLACE INTO Addresses (Account, Address, Own, TxCount, Balance)
           VALUES (?, ?, ?, ?, ?)""", address_data)
+    conn.commit()
+
+def db_update_txin_address(conn, address_tx_data):
+    conn.execute("""INSERT OR REPLACE INTO AddressInputs (Address, InputAddress, TxID, BlockHeight)
+          VALUES (?, ?, ?, ?)""", address_tx_data)
+    conn.commit()
+
+def db_update_txout_address(conn, address_tx_data):
+    conn.execute("""INSERT OR REPLACE INTO AddressOutputs (Address, OutputAddress, TxID, BlockHeight)
+          VALUES (?, ?, ?, ?)""", address_tx_data)
     conn.commit()
 
 def db_check_address(conn, address):
@@ -74,6 +98,7 @@ def scan_addresses(addresslist, conn, maxrequests=10, delay=0):
 
         txcount = addr_detail['final_n_tx']
         balance = addr_detail['balance']
+        
 
         dbdata = [account, addr, '1', txcount, balance]
         db_update_address(conn, dbdata)
@@ -82,12 +107,27 @@ def scan_addresses(addresslist, conn, maxrequests=10, delay=0):
 
         tx_addr = []
         for tx in txs:
+            txid = tx['hash']
+            height = tx['block_height']
+            
             for a in tx['addresses']:
                 tx_addr.append(a)
                 if a not in addresses:
                     dbdata = [None, a, '0', None, None]
                     #print('Address not mine: {}'.format(a))
                     db_update_address(conn, dbdata)
+
+            # Add input addresses / TXID to DB
+            for txin in tx['inputs']:
+                for a in txin['addresses']:
+                    dbdata = [addr, a, txid, height]
+                    db_update_txin_address(conn, dbdata)
+
+            # Add output addresses / TXID to DB
+            for txout in tx['outputs']:
+                for a in txout['addresses']:
+                    dbdata = [addr, a, txid, height]
+                    db_update_txout_address(conn, dbdata)
 
         print('Address: {0}\tAccount: {1}'.format(addr, account))
         print('Balance: {}'.format(balance))
